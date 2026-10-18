@@ -1,0 +1,153 @@
+Execução: 2026-10-17 23:10:25 → 23:14:13
+============================================================
+
+=== Dados carregados ===
+Instâncias: 12330 | Features: 17
+Distribuição do alvo:
+Revenue
+False    10422
+True      1908
+Name: count, dtype: int64
+
+=== Primeiras linhas ===
+   Administrative  Administrative_Duration  Informational  ...        VisitorType  Weekend  Revenue
+0               0                      0.0              0  ...  Returning_Visitor    False    False
+1               0                      0.0              0  ...  Returning_Visitor    False    False
+2               0                      0.0              0  ...  Returning_Visitor    False    False
+3               0                      0.0              0  ...  Returning_Visitor    False    False
+4               0                      0.0              0  ...  Returning_Visitor     True    False
+
+[5 rows x 18 columns]
+
+=== Informações gerais ===
+<class 'pandas.core.frame.DataFrame'>
+RangeIndex: 12330 entries, 0 to 12329
+Data columns (total 18 columns):
+ #   Column                   Non-Null Count  Dtype  
+---  ------                   --------------  -----  
+ 0   Administrative           12330 non-null  int64  
+ 1   Administrative_Duration  12330 non-null  float64
+ 2   Informational            12330 non-null  int64  
+ 3   Informational_Duration   12330 non-null  float64
+ 4   ProductRelated           12330 non-null  int64  
+ 5   ProductRelated_Duration  12330 non-null  float64
+ 6   BounceRates              12330 non-null  float64
+ 7   ExitRates                12330 non-null  float64
+ 8   PageValues               12330 non-null  float64
+ 9   SpecialDay               12330 non-null  float64
+ 10  Month                    12330 non-null  object 
+ 11  OperatingSystems         12330 non-null  int64  
+ 12  Browser                  12330 non-null  int64  
+ 13  Region                   12330 non-null  int64  
+ 14  TrafficType              12330 non-null  int64  
+ 15  VisitorType              12330 non-null  object 
+ 16  Weekend                  12330 non-null  bool   
+ 17  Revenue                  12330 non-null  bool   
+dtypes: bool(2), float64(7), int64(7), object(2)
+memory usage: 1.5+ MB
+
+=== Estatísticas descritivas (variáveis numéricas) ===
+                           count         mean          std  min         25%         50%          75%           max
+Administrative           12330.0     2.315166     3.321784  0.0    0.000000    1.000000     4.000000     27.000000
+Administrative_Duration  12330.0    80.818611   176.779107  0.0    0.000000    7.500000    93.256250   3398.750000
+Informational            12330.0     0.503569     1.270156  0.0    0.000000    0.000000     0.000000     24.000000
+Informational_Duration   12330.0    34.472398   140.749294  0.0    0.000000    0.000000     0.000000   2549.375000
+ProductRelated           12330.0    31.731468    44.475503  0.0    7.000000   18.000000    38.000000    705.000000
+ProductRelated_Duration  12330.0  1194.746220  1913.669288  0.0  184.137500  598.936905  1464.157214  63973.522230
+BounceRates              12330.0     0.022191     0.048488  0.0    0.000000    0.003112     0.016813      0.200000
+ExitRates                12330.0     0.043073     0.048597  0.0    0.014286    0.025156     0.050000      0.200000
+PageValues               12330.0     5.889258    18.568437  0.0    0.000000    0.000000     0.000000    361.763742
+SpecialDay               12330.0     0.061427     0.198917  0.0    0.000000    0.000000     0.000000      1.000000
+OperatingSystems         12330.0     2.124006     0.911325  1.0    2.000000    2.000000     3.000000      8.000000
+Browser                  12330.0     2.357097     1.717277  1.0    2.000000    2.000000     2.000000     13.000000
+Region                   12330.0     3.147364     2.401591  1.0    1.000000    3.000000     4.000000      9.000000
+TrafficType              12330.0     4.069586     4.025169  1.0    2.000000    2.000000     4.000000     20.000000
+
+=== Valores faltantes ===
+Nenhum valor faltante encontrado.
+
+Variáveis numéricas (14): ['Administrative', 'Administrative_Duration', 'Informational', 'Informational_Duration', 'ProductRelated', 'ProductRelated_Duration', 'BounceRates', 'ExitRates', 'PageValues', 'SpecialDay', 'OperatingSystems', 'Browser', 'Region', 'TrafficType']
+Variáveis categóricas/booleanas (3): ['Month', 'VisitorType', 'Weekend']
+
+=== Contagem por categoria ===
+
+Month:
+Month
+May     3364
+Nov     2998
+Mar     1907
+Dec     1727
+Oct      549
+Sep      448
+Aug      433
+Jul      432
+June     288
+Feb      184
+Name: count, dtype: int64
+
+VisitorType:
+VisitorType
+Returning_Visitor    10551
+New_Visitor           1694
+Other                   85
+Name: count, dtype: int64
+
+Weekend:
+Weekend
+False    9462
+True     2868
+Name: count, dtype: int64
+=== Shape após codificação ===
+X: (12330, 28) | y: (12330,)
+Tipos de coluna: {dtype('float64'): 28}
+
+=== Distribuição de classes ===
+Revenue
+0    10422
+1     1908
+Name: count, dtype: int64
+Razão negativo:positivo = 5.46:1
+
+=== Dados prontos para modelagem: X(12330, 28), y(12330,) ===
+
+=== 7 algoritmos definidos ===
+  - Logistic Regression
+  - Decision Tree
+  - Decision Tree (depth=10)
+  - K-Nearest Neighbors (k=5)
+  - Naive Bayes
+  - Random Forest
+  - Gradient Boosting
+
+=== Iniciando Spot-Checking ===
+Validação: RepeatedStratifiedKFold (10 folds × 10 repetições = 100 avaliações/algoritmo)
+
+[...] Logistic Regression  ->  ROC-AUC = 0.9053 ± 0.0118
+[...] Decision Tree  ->  ROC-AUC = 0.7487 ± 0.0181
+[...] Decision Tree (depth=10)  ->  ROC-AUC = 0.8507 ± 0.0206
+[...] K-Nearest Neighbors (k=5)  ->  ROC-AUC = 0.7715 ± 0.0188
+[...] Naive Bayes  ->  ROC-AUC = 0.8132 ± 0.0171
+[...] Random Forest  ->  ROC-AUC = 0.9276 ± 0.0100
+[...] Gradient Boosting  ->  ROC-AUC = 0.9281 ± 0.0093
+
+Spot-checking concluído!
+
+=== Tabela de Resultados (ordenada por ROC-AUC) ===
+                           ROC-AUC Média  ROC-AUC DP  F1-Macro Média  F1-Macro DP  Accuracy Média  Accuracy DP  Precision Média  Precision DP  Recall Média  Recall DP
+Algoritmo                                                                                                                                                             
+Gradient Boosting                 0.9281      0.0093          0.8070       0.0144          0.8969       0.0076           0.6594        0.0255        0.6926     0.0341
+Random Forest                     0.9276      0.0100          0.8070       0.0161          0.9011       0.0081           0.6899        0.0293        0.6564     0.0359
+Logistic Regression               0.9053      0.0118          0.7705       0.0141          0.8610       0.0099           0.5370        0.0245        0.7527     0.0325
+Decision Tree (depth=10)          0.8507      0.0206          0.7833       0.0170          0.8815       0.0098           0.6063        0.0316        0.6734     0.0375
+Naive Bayes                       0.8132      0.0171          0.5192       0.0148          0.5591       0.0182           0.2434        0.0091        0.8754     0.0254
+K-Nearest Neighbors (k=5)         0.7715      0.0188          0.6795       0.0157          0.8122       0.0104           0.4185        0.0241        0.5451     0.0347
+Decision Tree                     0.7487      0.0181          0.7414       0.0160          0.8607       0.0090           0.5473        0.0283        0.5866     0.0359
+
+=== TOP 3 Algoritmos Mais Promissores (por ROC-AUC) ===
+                     ROC-AUC Média  ROC-AUC DP  F1-Macro Média  F1-Macro DP
+Algoritmo                                                                  
+Gradient Boosting           0.9281      0.0093          0.8070       0.0144
+Random Forest               0.9276      0.0100          0.8070       0.0161
+Logistic Regression         0.9053      0.0118          0.7705       0.0141
+
+=== Script concluído. Verifique os arquivos CSV e PNG gerados. ===
