@@ -23,16 +23,16 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, FunctionTransformer
+from sklearn.compose import ColumnTransformer
 from sklearn.model_selection import RepeatedStratifiedKFold, cross_validate
-from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTENC
 from imblearn.pipeline import Pipeline as ImbPipeline
 
 import warnings
@@ -77,7 +77,11 @@ from ucimlrepo import fetch_ucirepo
 
 dataset = fetch_ucirepo(id=468)
 X_raw = dataset.data.features          
-y_raw = dataset.data.targets.squeeze() 
+y_raw = dataset.data.targets.squeeze()
+
+CODED_CAT_COLS = ['OperatingSystems', 'Browser', 'Region', 'TrafficType']
+X_raw = X_raw.copy()
+X_raw[CODED_CAT_COLS] = X_raw[CODED_CAT_COLS].astype(str)
 
 print("=== Dados carregados ===")
 print(f"Instâncias: {X_raw.shape[0]} | Features: {X_raw.shape[1]}")
@@ -107,6 +111,17 @@ if missing.sum() == 0:
     print("Nenhum valor faltante encontrado.")
 else:
     print(missing[missing > 0])
+
+# --- 2.2b Linhas duplicadas ---
+n_dup = df_eda.duplicated().sum()
+n_dup_feat = X_raw.duplicated().sum()
+print("\n=== Linhas duplicadas ===")
+print(f"Duplicatas exatas: {n_dup} ({n_dup/len(df_eda)*100:.2f}%)")
+print(f"Duplicatas com alvo conflitante: {n_dup_feat - n_dup}")
+if n_dup > 0:
+    print("Exemplos mais frequentes:")
+    print(df_eda[df_eda.duplicated(keep=False)]
+          .value_counts().head(3).to_string())
 
 # --- 2.3 Distribuição da variável alvo ---
 fig, ax = plt.subplots(figsize=(6, 4))
@@ -197,16 +212,18 @@ for col in X.select_dtypes(include=['object', 'bool']).columns:
         X[col].fillna(X[col].mode()[0], inplace=True)
 
 # --- 3.2 Codificação de variáveis categóricas ---
-# 'Month': variável nominal sem ordem -> One-Hot Encoding
-# 'VisitorType': nominal ('New_Visitor', 'Returning_Visitor', 'Other') -> One-Hot Encoding
-# 'Weekend': booleano -> cast para int (0/1)
-X = pd.get_dummies(X, columns=['Month', 'VisitorType'], drop_first=False)
-X['Weekend'] = X['Weekend'].astype(int)
-X = X.astype(float)
+# to one-hot enconding:
+# 'Month', 'VisitorType', 'Weekend', 'OperatingSystems', 'Browser', 'Region' e 'TrafficType'.
+X['Weekend'] = X['Weekend'].astype(str)
+CAT_FEATURES = ['Month', 'VisitorType', 'Weekend'] + CODED_CAT_COLS
+NUM_FEATURES = [c for c in X.columns if c not in CAT_FEATURES]
+X = X[NUM_FEATURES + CAT_FEATURES]
 
-print("=== Shape após codificação ===")
-print(f"X: {X.shape} | y: {y.shape}")
-print(f"Tipos de coluna: {X.dtypes.value_counts().to_dict()}")
+n_onehot = len(NUM_FEATURES) + sum(X[c].nunique() for c in CAT_FEATURES)
+print("=== Atributos para modelagem ===")
+print(f"Numéricos ({len(NUM_FEATURES)}): {NUM_FEATURES}")
+print(f"Categóricos ({len(CAT_FEATURES)}): {CAT_FEATURES}")
+print(f"Colunas após One-Hot (no pipeline): {n_onehot}")
 
 # --- 3.4 Verificação de desbalanceamento ---
 class_dist = pd.Series(y).value_counts().sort_index()
@@ -246,6 +263,9 @@ METRIC_PRINCIPAL = 'test_roc_auc'
 # --- 4.3 Estratégia de validação cruzada ---
 N_SPLITS  = 10  # k-folds
 N_REPEATS = 10  # repetições com shuffles diferentes
+
+#problema de MemoryError, da pra aumentar (testar).
+N_JOBS = 4
 cv_strategy = RepeatedStratifiedKFold(
     n_splits=N_SPLITS,
     n_repeats=N_REPEATS,
@@ -253,16 +273,42 @@ cv_strategy = RepeatedStratifiedKFold(
 )
 
 # --- 4.4 Função auxiliar de pipeline ---
+# Após o 1º ColumnTransformer as colunas ficam na ordem NUM_FEATURES + CAT_FEATURES, então as categóricas ocupam os índices abaixo.
+CAT_IDX = list(range(len(NUM_FEATURES), len(NUM_FEATURES) + len(CAT_FEATURES)))
+
+def to_float(X):
+    """Converte a saída do One-Hot (dtype object, herdado do SMOTENC) para
+    float64 — ocupa ~4x menos memória em cada processo paralelo."""
+    return np.asarray(X, dtype=np.float64)
+
 def make_pipeline(model):
     """
-    Cria ImbPipeline: SMOTE -> StandardScaler -> modelo.
-    SMOTE é aplicado apenas no fold de treino a cada iteração de CV,
-    eliminando data leakage. StandardScaler é necessário para LR, kNN e SVM.
+    Cria ImbPipeline: StandardScaler -> SMOTENC -> One-Hot -> modelo.
+    - O scaler vem antes do SMOTENC porque ele usa distâncias (kNN) para
+      gerar amostras sintéticas; sem padronização, atributos de grande escala
+      (ex.: ProductRelated_Duration) dominariam a vizinhança.
+    - SMOTENC interpola apenas os atributos numéricos; nos categóricos, a
+      amostra sintética recebe a categoria mais frequente entre os vizinhos,
+      evitando valores impossíveis (ex.: Month_Nov = 0.37).
+    - O One-Hot vem depois, sobre as categorias originais. handle_unknown=
+      'ignore' cobre categorias raras ausentes no fold de treino.
+    Todas as etapas são ajustadas apenas no fold de treino a cada iteração
+    de CV, eliminando data leakage.
     """
+    scaler = ColumnTransformer([
+        ('num', StandardScaler(), NUM_FEATURES),
+        ('cat', 'passthrough',    CAT_FEATURES),
+    ])
+    onehot = ColumnTransformer([
+        ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False),
+         CAT_IDX),
+    ], remainder='passthrough')
     return ImbPipeline(steps=[
-        ('smote',  SMOTE(random_state=RANDOM_SEED)),
-        ('scaler', StandardScaler()),
-        ('model',  model)
+        ('scaler',  scaler),
+        ('smotenc', SMOTENC(categorical_features=CAT_IDX, random_state=RANDOM_SEED)),
+        ('onehot',  onehot),
+        ('float',   FunctionTransformer(to_float)),
+        ('model',   model)
     ])
 
 # --- 4.5 Algoritmos selecionados ---
@@ -324,7 +370,7 @@ for name, pipeline in algorithms:
         y=y_final,
         cv=cv_strategy,
         scoring=SCORING,
-        n_jobs=-1,              
+        n_jobs=N_JOBS,
         return_train_score=False
     )
     results[name] = cv_res
