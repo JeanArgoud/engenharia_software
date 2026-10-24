@@ -79,6 +79,9 @@ dataset = fetch_ucirepo(id=468)
 X_raw = dataset.data.features          
 y_raw = dataset.data.targets.squeeze()
 
+# OperatingSystems, Browser, Region e TrafficType são códigos inteiros sem
+# relação de ordem (Region=9 não é "maior" que Region=1): convertidos para
+# texto para serem tratados como categóricos na EDA e no pré-processamento.
 CODED_CAT_COLS = ['OperatingSystems', 'Browser', 'Region', 'TrafficType']
 X_raw = X_raw.copy()
 X_raw[CODED_CAT_COLS] = X_raw[CODED_CAT_COLS].astype(str)
@@ -138,7 +141,9 @@ plt.close()
 
 # --- 2.4 Identificar tipos de colunas ---
 num_cols = X_raw.select_dtypes(include=[np.number]).columns.tolist()
-cat_cols = X_raw.select_dtypes(include=['object', 'bool']).columns.tolist()
+# exclude=[np.number] em vez de include=['object', ...]: no pandas 3 texto tem
+# dtype 'str', e incluí-lo via 'object' está depreciado.
+cat_cols = X_raw.select_dtypes(exclude=[np.number]).columns.tolist()
 print(f"\nVariáveis numéricas ({len(num_cols)}): {num_cols}")
 print(f"Variáveis categóricas/booleanas ({len(cat_cols)}): {cat_cols}")
 
@@ -177,7 +182,9 @@ plt.savefig(LOGS_DIR / "eda_03_correlation_matrix.png", dpi=150)
 plt.close()
 
 # --- 2.8 Relação de variáveis-chave com o alvo ---
-# TODO: Adicionar/remover colunas conforme análise visual revelar.
+# Selecionadas as métricas do Google Analytics (PageValues, BounceRates,
+# ExitRates) e as durações por tipo de página: são as variáveis numéricas com
+# maior correlação com Revenue e as que melhor descrevem o engajamento na sessão.
 highlight_features = ['PageValues', 'BounceRates', 'ExitRates',
                        'ProductRelated_Duration', 'Administrative_Duration',
                        'Informational_Duration']
@@ -194,7 +201,28 @@ plt.savefig(LOGS_DIR / "eda_04_feature_vs_target.png", dpi=150)
 plt.close()
 
 # --- 2.9 Síntese da EDA ---
-# TODO: Preencher após a análise visual com um resumo textual dos achados.
+# 1. Alvo desbalanceado: 84,5% sem compra x 15,5% com compra (5,46:1) ->
+#    Accuracy é enganosa; usar ROC-AUC/F1 e balancear o treino (SMOTENC).
+# 2. Sem valores faltantes; 125 duplicatas exatas (1,01%), sem alvo
+#    conflitante, quase todas sessões de 1 página sem compra -> mantidas.
+# 3. Numéricas com forte assimetria à direita (skew de 2 a 7,6) e escalas
+#    muito diferentes (ProductRelated_Duration chega a ~64 mil s; taxas em
+#    [0, 0,2]) -> padronização necessária para kNN, LR e SMOTENC.
+# 4. PageValues é o atributo mais informativo (corr. 0,49 com o alvo): é zero
+#    em 77,9% das sessões, e a taxa de compra é 56,3% quando PageValues > 0
+#    contra 3,9% quando = 0. Como é calculado a partir de páginas visitadas
+#    antes de transações, pode carregar informação próxima do próprio alvo
+#    (possível vazamento) — ponto a discutir no relatório.
+# 5. ExitRates (-0,21) e BounceRates (-0,15) se relacionam negativamente com a
+#    compra; as durações/contagens de páginas, positivamente (0,07 a 0,16).
+# 6. Pares redundantes: BounceRates x ExitRates (0,91) e ProductRelated x
+#    ProductRelated_Duration (0,86). Mantidos no spot-checking (modelos de
+#    árvore não são afetados), mas relevantes para LR e NB.
+# 7. Categóricas: taxa de compra varia por mês (1,6% em Feb a 25,4% em Nov;
+#    Jan e Apr ausentes) e é maior em novos visitantes (24,9%) que em
+#    recorrentes (13,9%). OperatingSystems, Browser, Region e TrafficType são
+#    códigos nominais (one-hot); TrafficType, Browser e OperatingSystems têm
+#    categorias raras (< 30 sessões) -> handle_unknown='ignore' no One-Hot.
 
 # ==============================================================
 # SEÇÃO 3: PRÉ-PROCESSAMENTO DOS DADOS
@@ -204,16 +232,20 @@ X = X_raw.copy()
 y = y_raw.astype(int)  
 
 # --- 3.1 Tratamento de valores faltantes ---
+# O dataset não possui valores faltantes (ver 2.2); o bloco abaixo é mantido
+# por robustez. Atribuição explícita (X[col] = ...) em vez de inplace=True:
+# no pandas 3 (Copy-on-Write), X[col].fillna(..., inplace=True) não altera X.
 for col in X.select_dtypes(include=[np.number]).columns:
     if X[col].isnull().sum() > 0:
-        X[col].fillna(X[col].median(), inplace=True)
-for col in X.select_dtypes(include=['object', 'bool']).columns:
+        X[col] = X[col].fillna(X[col].median())
+for col in X.select_dtypes(exclude=[np.number]).columns:
     if X[col].isnull().sum() > 0:
-        X[col].fillna(X[col].mode()[0], inplace=True)
+        X[col] = X[col].fillna(X[col].mode()[0])
 
 # --- 3.2 Codificação de variáveis categóricas ---
-# to one-hot enconding:
-# 'Month', 'VisitorType', 'Weekend', 'OperatingSystems', 'Browser', 'Region' e 'TrafficType'.
+# Atributos nominais que recebem One-Hot Encoding (dentro do pipeline, após o
+# SMOTENC — ver 4.4): 'Month', 'VisitorType', 'Weekend', 'OperatingSystems',
+# 'Browser', 'Region' e 'TrafficType'. Aqui eles são mantidos como texto.
 X['Weekend'] = X['Weekend'].astype(str)
 CAT_FEATURES = ['Month', 'VisitorType', 'Weekend'] + CODED_CAT_COLS
 NUM_FEATURES = [c for c in X.columns if c not in CAT_FEATURES]
@@ -225,7 +257,7 @@ print(f"Numéricos ({len(NUM_FEATURES)}): {NUM_FEATURES}")
 print(f"Categóricos ({len(CAT_FEATURES)}): {CAT_FEATURES}")
 print(f"Colunas após One-Hot (no pipeline): {n_onehot}")
 
-# --- 3.4 Verificação de desbalanceamento ---
+# --- 3.3 Verificação de desbalanceamento ---
 class_dist = pd.Series(y).value_counts().sort_index()
 ratio = class_dist[0] / class_dist[1]
 print(f"\n=== Distribuição de classes ===")
@@ -243,8 +275,12 @@ print(f"\n=== Dados prontos para modelagem: X{X_final.shape}, y{y_final.shape} =
 
 # --- 4.1 Problema e abordagem ---
 # Tarefa: Classificação binária (Revenue: compra=1 / não compra=0)
-# Justificativa: variável alvo é categórica (booleana), binárica.
-# TODO: Expandir justificativa no relatório.
+# Justificativa: a variável alvo é booleana (a sessão terminou ou não em
+# compra), portanto discreta com duas classes — não há valor contínuo a
+# prever, o que descarta regressão. Do ponto de vista do negócio, a pergunta
+# é "este visitante vai comprar?", e a probabilidade estimada pelo
+# classificador permite ordenar sessões por propensão de compra (ex.: para
+# ofertas direcionadas), o que também motiva o uso da ROC-AUC como métrica.
 
 # --- 4.2 Métricas de avaliação ---
 # Dataset desbalanceado (~84/16) -> Accuracy sozinha é enganosa.
@@ -264,7 +300,9 @@ METRIC_PRINCIPAL = 'test_roc_auc'
 N_SPLITS  = 10  # k-folds
 N_REPEATS = 10  # repetições com shuffles diferentes
 
-#problema de MemoryError, da pra aumentar (testar).
+# Processos paralelos no cross_validate. Cada processo carrega sua própria
+# cópia dos dados; com -1 (todos os núcleos) houve MemoryError. Pode ser
+# aumentado se houver RAM sobrando, ou reduzido em caso de MemoryError.
 N_JOBS = 4
 cv_strategy = RepeatedStratifiedKFold(
     n_splits=N_SPLITS,
@@ -273,7 +311,8 @@ cv_strategy = RepeatedStratifiedKFold(
 )
 
 # --- 4.4 Função auxiliar de pipeline ---
-# Após o 1º ColumnTransformer as colunas ficam na ordem NUM_FEATURES + CAT_FEATURES, então as categóricas ocupam os índices abaixo.
+# Após o 1º ColumnTransformer as colunas ficam na ordem NUM_FEATURES +
+# CAT_FEATURES, então as categóricas ocupam os índices abaixo.
 CAT_IDX = list(range(len(NUM_FEATURES), len(NUM_FEATURES) + len(CAT_FEATURES)))
 
 def to_float(X):
