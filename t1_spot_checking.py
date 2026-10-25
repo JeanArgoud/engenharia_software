@@ -357,7 +357,7 @@ algorithms = [
      make_pipeline(LogisticRegression(
          max_iter=1000, random_state=RANDOM_SEED))),
 
-    # Árvore / Não-paramétrico / Instâncias
+    # Árvore / Não-paramétrico / Simbólico (regras)
     ("Decision Tree",
      make_pipeline(DecisionTreeClassifier(
          random_state=RANDOM_SEED))),
