@@ -1,0 +1,21 @@
+# Ambiente virtual do Python (recriável com pip install)
+.venv/
+
+# Cache de bytecode gerado automaticamente pelo Python
+__pycache__/
+*.pyc
+
+# Checkpoints do Jupyter/Colab
+.ipynb_checkpoints/
+
+# Arquivos temporários do Word (abertos no momento)
+~$*
+
+# Arquivos do sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Configurações de editores
+.vscode/
+.idea/
